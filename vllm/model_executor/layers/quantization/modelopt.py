@@ -523,6 +523,11 @@ class ModelOptFp8LinearMethod(LinearMethodBase):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        logger.debug(
+            "ModelOptFp8LinearMethod kernel: x=%s, weight=%s",
+            x.shape,
+            layer.weight.shape,
+        )
         return self.fp8_linear.apply_weights(layer, x, bias)
 
 
@@ -598,6 +603,11 @@ class ModelOptFp8PcPtLinearMethod(LinearMethodBase):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        logger.debug(
+            "ModelOptFp8PcPtLinearMethod kernel: x=%s, weight=%s",
+            x.shape,
+            layer.weight.shape,
+        )
         return self.fp8_linear.apply_weights(layer, x, bias)
 
 
@@ -711,6 +721,11 @@ class ModelOptFp8PbWoLinearMethod(LinearMethodBase):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        logger.debug(
+            "ModelOptFp8PbWoLinearMethod kernel: x=%s, weight=%s",
+            x.shape,
+            layer.weight.shape,
+        )
         return self.w8a8_block_fp8_linear.apply(
             input=x,
             weight=layer.weight,
@@ -935,6 +950,11 @@ class ModelOptFp8MoEMethod(FusedMoEMethodBase):
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         assert self.is_monolithic
         assert self.moe_kernel is not None
+        logger.debug(
+            "ModelOptFp8MoEMethod.apply_monolithic kernel: x=%s, backend=%s",
+            x.shape,
+            self.fp8_backend,
+        )
         return self.moe_kernel.apply_monolithic(
             x,
             layer.w13_weight,
@@ -960,6 +980,11 @@ class ModelOptFp8MoEMethod(FusedMoEMethodBase):
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         assert not self.is_monolithic
         assert self.moe_kernel is not None
+        logger.debug(
+            "ModelOptFp8MoEMethod.apply kernel: x=%s, backend=%s",
+            x.shape,
+            self.fp8_backend,
+        )
         return self.moe_kernel.apply(
             x,
             layer.w13_weight,
@@ -1173,6 +1198,12 @@ class ModelOptNvFp4LinearMethod(LinearMethodBase):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        logger.debug(
+            "ModelOptNvFp4LinearMethod kernel: x=%s, weight=%s, backend=%s",
+            x.shape,
+            layer.weight.shape,
+            self.backend,
+        )
         return apply_nvfp4_linear(
             backend=self.backend,
             layer=layer,
@@ -1419,6 +1450,11 @@ class ModelOptNvFp4FusedMoE(FusedMoEMethodBase):
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         assert self.is_monolithic
         assert self.moe_kernel is not None
+        logger.debug(
+            "ModelOptNvFp4FusedMoE.apply_monolithic kernel: x=%s, backend=%s",
+            x.shape,
+            self.nvfp4_backend,
+        )
         return self.moe_kernel.apply_monolithic(
             x,
             layer.w13_weight,
@@ -1444,6 +1480,11 @@ class ModelOptNvFp4FusedMoE(FusedMoEMethodBase):
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         assert not self.is_monolithic
         assert self.moe_kernel is not None
+        logger.debug(
+            "ModelOptNvFp4FusedMoE.apply kernel: x=%s, backend=%s",
+            x.shape,
+            self.nvfp4_backend,
+        )
         return self.moe_kernel.apply(
             x,
             layer.w13_weight,
@@ -1691,6 +1732,12 @@ class ModelOptMxFp8LinearMethod(LinearMethodBase):
                 f"expected {MXFP8_SCALE_DTYPE}"
             )
 
+        logger.debug(
+            "ModelOptMxFp8LinearMethod kernel: x=%s, weight=%s, backend=%s",
+            x.shape,
+            layer.weight.shape,
+            self.backend.value,
+        )
         return self.mxfp8_linear_op.apply(
             input=x,
             weight=layer.weight,
@@ -2026,6 +2073,11 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
                 f"got {fi_activation_type}."
             )
 
+        logger.debug(
+            "ModelOptMxFp8FusedMoE.apply_monolithic kernel: x=%s, backend=%s",
+            x.shape,
+            self.mxfp8_backend,
+        )
         return flashinfer_trtllm_fp8_block_scale_moe(**kwargs)
 
     def apply(
