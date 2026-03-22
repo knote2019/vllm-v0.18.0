@@ -512,7 +512,7 @@ class ModelOptFp8LinearMethod(LinearMethodBase):
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         if "layers.0." in getattr(self, "_layer_prefix", ""):
-            logger.debug(
+            logger.info(
                 "ModelOptFp8LinearMethod loading layer0 weights: "
                 "prefix=%s weight=%s dtype=%s, weight_scale=%s, input_scale=%s",
                 self._layer_prefix,
@@ -606,7 +606,7 @@ class ModelOptFp8PcPtLinearMethod(LinearMethodBase):
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         if "layers.0." in getattr(self, "_layer_prefix", ""):
-            logger.debug(
+            logger.info(
                 "ModelOptFp8PcPtLinearMethod loading layer0 weights: "
                 "prefix=%s weight=%s dtype=%s, weight_scale=%s",
                 self._layer_prefix,
@@ -717,7 +717,7 @@ class ModelOptFp8PbWoLinearMethod(LinearMethodBase):
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         if "layers.0." in getattr(self, "_layer_prefix", ""):
-            logger.debug(
+            logger.info(
                 "ModelOptFp8PbWoLinearMethod loading layer0 weights: "
                 "prefix=%s weight=%s dtype=%s, weight_scale=%s",
                 self._layer_prefix,
@@ -921,7 +921,7 @@ class ModelOptFp8MoEMethod(FusedMoEMethodBase):
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         if "layers.0." in getattr(self, "_layer_prefix", ""):
-            logger.debug(
+            logger.info(
                 "ModelOptFp8MoEMethod loading layer0 weights: "
                 "prefix=%s w13=%s dtype=%s, w2=%s, backend=%s",
                 self._layer_prefix,
@@ -1198,7 +1198,7 @@ class ModelOptNvFp4LinearMethod(LinearMethodBase):
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         if "layers.0." in getattr(self, "_layer_prefix", ""):
-            logger.debug(
+            logger.info(
                 "ModelOptNvFp4LinearMethod loading layer0 weights: "
                 "prefix=%s weight=%s dtype=%s, weight_scale=%s, backend=%s",
                 self._layer_prefix,
@@ -1403,7 +1403,7 @@ class ModelOptNvFp4FusedMoE(FusedMoEMethodBase):
         Convert NVFP4 MoE weights into kernel format and setup the kernel.
         """
         if "layers.0." in getattr(self, "_layer_prefix", ""):
-            logger.debug(
+            logger.info(
                 "ModelOptNvFp4FusedMoE loading layer0 weights: "
                 "prefix=%s w13=%s dtype=%s, w2=%s, backend=%s",
                 self._layer_prefix,
@@ -1717,7 +1717,7 @@ class ModelOptMxFp8LinearMethod(LinearMethodBase):
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         if "layers.0." in getattr(self, "_layer_prefix", ""):
-            logger.debug(
+            logger.info(
                 "ModelOptMxFp8LinearMethod loading layer0 weights: "
                 "prefix=%s weight=%s dtype=%s, weight_scale=%s, backend=%s",
                 self._layer_prefix,
@@ -1998,7 +1998,7 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
             return
 
         if "layers.0." in getattr(self, "_layer_prefix", ""):
-            logger.debug(
+            logger.info(
                 "ModelOptMxFp8FusedMoE loading layer0 weights: "
                 "prefix=%s w13=%s dtype=%s, w2=%s, backend=%s",
                 self._layer_prefix,
