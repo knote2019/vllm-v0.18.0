@@ -204,6 +204,7 @@ class ModelOptQuantConfigBase(QuantizationConfig):
         # now, the layer is quantized, handle it here
         if isinstance(layer, LinearBase):
             quant_method = self.LinearMethodCls(self)
+            quant_method._layer_prefix = prefix
             if getattr(quant_method, "backend", "") == "marlin":
                 quant_method.marlin_input_dtype = get_marlin_input_dtype(prefix)
             return quant_method
@@ -211,6 +212,7 @@ class ModelOptQuantConfigBase(QuantizationConfig):
             quant_method = self.FusedMoEMethodCls(
                 quant_config=self, moe_config=layer.moe_config
             )
+            quant_method._layer_prefix = prefix
             if getattr(quant_method, "backend", "") == "marlin":
                 quant_method.marlin_input_dtype = get_marlin_input_dtype(prefix)
             return quant_method
@@ -449,6 +451,8 @@ class ModelOptFp8LinearMethod(LinearMethodBase):
         Args: quant_config: The ModelOpt quantization config.
     """
 
+    _layer_prefix: str = ""  # set by get_quant_method before process_weights_after_loading
+
     def __init__(self, quant_config: ModelOptFp8Config) -> None:
         self.quant_config = quant_config
         self.fp8_linear = init_fp8_linear_kernel(
@@ -507,6 +511,16 @@ class ModelOptFp8LinearMethod(LinearMethodBase):
             layer.register_parameter("input_scale", scale)
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
+        if "layers.0." in getattr(self, "_layer_prefix", ""):
+            logger.debug(
+                "ModelOptFp8LinearMethod loading layer0 weights: "
+                "prefix=%s weight=%s dtype=%s, weight_scale=%s, input_scale=%s",
+                self._layer_prefix,
+                layer.weight.shape,
+                layer.weight.dtype,
+                layer.weight_scale.shape,
+                layer.input_scale.shape,
+            )
         weight = layer.weight
         max_w_scale = layer.weight_scale.max()
         if not (layer.weight_scale == layer.weight_scale[0]).all():
@@ -523,11 +537,6 @@ class ModelOptFp8LinearMethod(LinearMethodBase):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        logger.debug(
-            "ModelOptFp8LinearMethod kernel: x=%s, weight=%s",
-            x.shape,
-            layer.weight.shape,
-        )
         return self.fp8_linear.apply_weights(layer, x, bias)
 
 
@@ -539,6 +548,8 @@ class ModelOptFp8PcPtLinearMethod(LinearMethodBase):
     - weight_scale: fp32, shape [out] (per-output-channel)
     - no input_scale (activations are dynamically quantized per-token)
     """
+
+    _layer_prefix: str = ""  # set by get_quant_method before process_weights_after_loading
 
     def __init__(self, quant_config: ModelOptFp8Config) -> None:
         self.quant_config = quant_config
@@ -594,6 +605,15 @@ class ModelOptFp8PcPtLinearMethod(LinearMethodBase):
         layer.register_parameter("weight_scale", weight_scale)
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
+        if "layers.0." in getattr(self, "_layer_prefix", ""):
+            logger.debug(
+                "ModelOptFp8PcPtLinearMethod loading layer0 weights: "
+                "prefix=%s weight=%s dtype=%s, weight_scale=%s",
+                self._layer_prefix,
+                layer.weight.shape,
+                layer.weight.dtype,
+                layer.weight_scale.shape,
+            )
         layer.weight = Parameter(layer.weight.t(), requires_grad=False)
         layer.weight_scale = Parameter(layer.weight_scale.data, requires_grad=False)
 
@@ -603,11 +623,6 @@ class ModelOptFp8PcPtLinearMethod(LinearMethodBase):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        logger.debug(
-            "ModelOptFp8PcPtLinearMethod kernel: x=%s, weight=%s",
-            x.shape,
-            layer.weight.shape,
-        )
         return self.fp8_linear.apply_weights(layer, x, bias)
 
 
@@ -622,6 +637,7 @@ class ModelOptFp8PbWoLinearMethod(LinearMethodBase):
     """
 
     _WEIGHT_BLOCK_SIZE: tuple[int, int] = (128, 128)
+    _layer_prefix: str = ""  # set by get_quant_method before process_weights_after_loading
 
     def __init__(self, quant_config: ModelOptFp8Config) -> None:
         self.quant_config = quant_config
@@ -700,6 +716,15 @@ class ModelOptFp8PbWoLinearMethod(LinearMethodBase):
         layer.register_parameter("weight_scale", weight_scale)
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
+        if "layers.0." in getattr(self, "_layer_prefix", ""):
+            logger.debug(
+                "ModelOptFp8PbWoLinearMethod loading layer0 weights: "
+                "prefix=%s weight=%s dtype=%s, weight_scale=%s",
+                self._layer_prefix,
+                layer.weight.shape,
+                layer.weight.dtype,
+                layer.weight_scale.shape,
+            )
         # Keep weight in [out, in] layout for W8A8BlockFp8LinearOp.
         layer.weight = Parameter(layer.weight.data, requires_grad=False)
 
@@ -721,11 +746,6 @@ class ModelOptFp8PbWoLinearMethod(LinearMethodBase):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        logger.debug(
-            "ModelOptFp8PbWoLinearMethod kernel: x=%s, weight=%s",
-            x.shape,
-            layer.weight.shape,
-        )
         return self.w8a8_block_fp8_linear.apply(
             input=x,
             weight=layer.weight,
@@ -742,6 +762,8 @@ class ModelOptFp8MoEMethod(FusedMoEMethodBase):
     Args:
         quant_config: The ModelOpt quantization config.
     """
+
+    _layer_prefix: str = ""  # set by get_quant_method before process_weights_after_loading
 
     def __init__(
         self,
@@ -898,6 +920,16 @@ class ModelOptFp8MoEMethod(FusedMoEMethodBase):
         )
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
+        if "layers.0." in getattr(self, "_layer_prefix", ""):
+            logger.debug(
+                "ModelOptFp8MoEMethod loading layer0 weights: "
+                "prefix=%s w13=%s dtype=%s, w2=%s, backend=%s",
+                self._layer_prefix,
+                layer.w13_weight.shape,
+                layer.w13_weight.dtype,
+                layer.w2_weight.shape,
+                self.fp8_backend,
+            )
         w13 = layer.w13_weight
         w2 = layer.w2_weight
         w13_scale = layer.w13_weight_scale
@@ -950,11 +982,6 @@ class ModelOptFp8MoEMethod(FusedMoEMethodBase):
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         assert self.is_monolithic
         assert self.moe_kernel is not None
-        logger.debug(
-            "ModelOptFp8MoEMethod.apply_monolithic kernel: x=%s, backend=%s",
-            x.shape,
-            self.fp8_backend,
-        )
         return self.moe_kernel.apply_monolithic(
             x,
             layer.w13_weight,
@@ -980,11 +1007,6 @@ class ModelOptFp8MoEMethod(FusedMoEMethodBase):
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         assert not self.is_monolithic
         assert self.moe_kernel is not None
-        logger.debug(
-            "ModelOptFp8MoEMethod.apply kernel: x=%s, backend=%s",
-            x.shape,
-            self.fp8_backend,
-        )
         return self.moe_kernel.apply(
             x,
             layer.w13_weight,
@@ -1093,6 +1115,8 @@ class ModelOptNvFp4LinearMethod(LinearMethodBase):
     Args: quant_config: The ModelOpt quantization config.
     """
 
+    _layer_prefix: str = ""  # set by get_quant_method before process_weights_after_loading
+
     def __init__(self, quant_config: ModelOptNvFp4Config) -> None:
         self.quant_config = quant_config
         self.marlin_input_dtype = None
@@ -1173,6 +1197,16 @@ class ModelOptNvFp4LinearMethod(LinearMethodBase):
         layer.register_parameter("weight_scale", weight_scale)
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
+        if "layers.0." in getattr(self, "_layer_prefix", ""):
+            logger.debug(
+                "ModelOptNvFp4LinearMethod loading layer0 weights: "
+                "prefix=%s weight=%s dtype=%s, weight_scale=%s, backend=%s",
+                self._layer_prefix,
+                layer.weight.shape,
+                layer.weight.dtype,
+                layer.weight_scale.shape,
+                self.backend,
+            )
         # Rename ModelOpt checkpoint names to standardized names
         input_global_scale = layer.input_scale.max().to(torch.float32)
         layer.input_global_scale = Parameter(input_global_scale, requires_grad=False)
@@ -1198,12 +1232,6 @@ class ModelOptNvFp4LinearMethod(LinearMethodBase):
         x: torch.Tensor,
         bias: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        logger.debug(
-            "ModelOptNvFp4LinearMethod kernel: x=%s, weight=%s, backend=%s",
-            x.shape,
-            layer.weight.shape,
-            self.backend,
-        )
         return apply_nvfp4_linear(
             backend=self.backend,
             layer=layer,
@@ -1218,6 +1246,8 @@ class ModelOptNvFp4FusedMoE(FusedMoEMethodBase):
     Args:
         quant_config: NVFP4 Quant Config
     """
+
+    _layer_prefix: str = ""  # set by get_quant_method before process_weights_after_loading
 
     def __init__(
         self,
@@ -1372,6 +1402,16 @@ class ModelOptNvFp4FusedMoE(FusedMoEMethodBase):
         """
         Convert NVFP4 MoE weights into kernel format and setup the kernel.
         """
+        if "layers.0." in getattr(self, "_layer_prefix", ""):
+            logger.debug(
+                "ModelOptNvFp4FusedMoE loading layer0 weights: "
+                "prefix=%s w13=%s dtype=%s, w2=%s, backend=%s",
+                self._layer_prefix,
+                layer.w13_weight.shape,
+                layer.w13_weight.dtype,
+                layer.w2_weight.shape,
+                self.nvfp4_backend,
+            )
 
         # Use a single gscale for w13.
         if self.moe.is_act_and_mul and not torch.allclose(
@@ -1450,11 +1490,6 @@ class ModelOptNvFp4FusedMoE(FusedMoEMethodBase):
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         assert self.is_monolithic
         assert self.moe_kernel is not None
-        logger.debug(
-            "ModelOptNvFp4FusedMoE.apply_monolithic kernel: x=%s, backend=%s",
-            x.shape,
-            self.nvfp4_backend,
-        )
         return self.moe_kernel.apply_monolithic(
             x,
             layer.w13_weight,
@@ -1480,11 +1515,6 @@ class ModelOptNvFp4FusedMoE(FusedMoEMethodBase):
     ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         assert not self.is_monolithic
         assert self.moe_kernel is not None
-        logger.debug(
-            "ModelOptNvFp4FusedMoE.apply kernel: x=%s, backend=%s",
-            x.shape,
-            self.nvfp4_backend,
-        )
         return self.moe_kernel.apply(
             x,
             layer.w13_weight,
@@ -1583,6 +1613,8 @@ class ModelOptMxFp8Config(ModelOptQuantConfigBase):
 
 class ModelOptMxFp8LinearMethod(LinearMethodBase):
     """Linear method for ModelOpt MXFP8 quantization."""
+
+    _layer_prefix: str = ""  # set by get_quant_method before process_weights_after_loading
 
     def __init__(self, quant_config: ModelOptMxFp8Config) -> None:
         self.quant_config = quant_config
@@ -1684,6 +1716,16 @@ class ModelOptMxFp8LinearMethod(LinearMethodBase):
         )
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
+        if "layers.0." in getattr(self, "_layer_prefix", ""):
+            logger.debug(
+                "ModelOptMxFp8LinearMethod loading layer0 weights: "
+                "prefix=%s weight=%s dtype=%s, weight_scale=%s, backend=%s",
+                self._layer_prefix,
+                layer.weight.shape,
+                layer.weight.dtype,
+                layer.weight_scale.shape,
+                self.backend.value,
+            )
         # Validate weight tensor
         if layer.weight.ndim != 2:
             raise ValueError(
@@ -1732,12 +1774,6 @@ class ModelOptMxFp8LinearMethod(LinearMethodBase):
                 f"expected {MXFP8_SCALE_DTYPE}"
             )
 
-        logger.debug(
-            "ModelOptMxFp8LinearMethod kernel: x=%s, weight=%s, backend=%s",
-            x.shape,
-            layer.weight.shape,
-            self.backend.value,
-        )
         return self.mxfp8_linear_op.apply(
             input=x,
             weight=layer.weight,
@@ -1749,6 +1785,8 @@ class ModelOptMxFp8LinearMethod(LinearMethodBase):
 
 class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
     """FlashInfer TRTLLM MXFP8 block-scale MoE for ModelOpt checkpoints."""
+
+    _layer_prefix: str = ""  # set by get_quant_method before process_weights_after_loading
 
     def __init__(
         self,
@@ -1959,6 +1997,16 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
         if getattr(layer, "_already_called_process_weights_after_loading", False):
             return
 
+        if "layers.0." in getattr(self, "_layer_prefix", ""):
+            logger.debug(
+                "ModelOptMxFp8FusedMoE loading layer0 weights: "
+                "prefix=%s w13=%s dtype=%s, w2=%s, backend=%s",
+                self._layer_prefix,
+                layer.w13_weight.shape,
+                layer.w13_weight.dtype,
+                layer.w2_weight.shape,
+                self.mxfp8_backend,
+            )
         self._check_weight_dtypes(layer)
         self._shuffle_weights_for_trtllm(layer)
         layer._already_called_process_weights_after_loading = True
@@ -2073,11 +2121,6 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
                 f"got {fi_activation_type}."
             )
 
-        logger.debug(
-            "ModelOptMxFp8FusedMoE.apply_monolithic kernel: x=%s, backend=%s",
-            x.shape,
-            self.mxfp8_backend,
-        )
         return flashinfer_trtllm_fp8_block_scale_moe(**kwargs)
 
     def apply(
